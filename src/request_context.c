@@ -50,7 +50,6 @@ S3Status S3_create_request_context(S3RequestContext **requestContextReturn)
     return S3StatusOK;
 }
 
-
 void S3_destroy_request_context(S3RequestContext *requestContext)
 {
     curl_multi_cleanup(requestContext->curlm);
@@ -109,6 +108,7 @@ S3Status S3_runonce_request_context(S3RequestContext *requestContext,
                                     int *requestsRemainingReturn)
 {
     CURLMcode status;
+    S3Status  s3status = S3StatusOK;
 
     do {
         status = curl_multi_perform(requestContext->curlm,
@@ -123,50 +123,60 @@ S3Status S3_runonce_request_context(S3RequestContext *requestContext,
         default:
             return S3StatusInternalError;
         }
+        s3status = S3_finish_request_context(requestContext);
+    } while (S3StatusOK == s3status);
 
-        CURLMsg *msg;
-        int junk;
-        while ((msg = curl_multi_info_read(requestContext->curlm, &junk))) {
-            if (msg->msg != CURLMSG_DONE) {
-                return S3StatusInternalError;
-            }
-            Request *request;
-            if (curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE, 
-                                  (char **) (char *) &request) != CURLE_OK) {
-                return S3StatusInternalError;
-            }
-            // Remove the request from the list of requests
-            if (request->prev == request->next) {
-                // It was the only one on the list
-                requestContext->requests = 0;
-            }
-            else {
-                // It doesn't matter what the order of them are, so just in
-                // case request was at the head of the list, put the one after
-                // request to the head of the list
-                requestContext->requests = request->next;
-                request->prev->next = request->next;
-                request->next->prev = request->prev;
-            }
-            if ((msg->data.result != CURLE_OK) &&
-                (request->status == S3StatusOK)) {
-                request->status = request_curl_code_to_status
-                    (msg->data.result);
-            }
-            if (curl_multi_remove_handle(requestContext->curlm, 
-                                         msg->easy_handle) != CURLM_OK) {
-                return S3StatusInternalError;
-            }
-            // Finish the request, ensuring that all callbacks have been made,
-            // and also releases the request
-            request_finish(request);
-            // Now, since a callback was made, there may be new requests 
-            // queued up to be performed immediately, so do so
-            status = CURLM_CALL_MULTI_PERFORM;
+    return s3status;
+}
+
+S3Status S3_finish_request_context(S3RequestContext *requestContext)
+{
+    CURLMsg *msg;
+    int junk;
+    while ((msg = curl_multi_info_read(requestContext->curlm, &junk))) {
+        if (msg->msg != CURLMSG_DONE) {
+            return S3StatusInternalError;
         }
-    } while (status == CURLM_CALL_MULTI_PERFORM);
+        Request *request;
+        if (curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE,
+                              (char **) (char *) &request) != CURLE_OK) {
+            return S3StatusInternalError;
+        }
+        // Remove the request from the list of requests
+        if (request->prev == request->next) {
+            // It was the only one on the list
+            requestContext->requests = 0;
+        }
+        else {
+            // It doesn't matter what the order of them are, so just in
+            // case request was at the head of the list, put the one after
+            // request to the head of the list
+            requestContext->requests = request->next;
+            request->prev->next = request->next;
+            request->next->prev = request->prev;
+        }
+        if ((msg->data.result != CURLE_OK) &&
+            (request->status == S3StatusOK)) {
+            request->status = request_curl_code_to_status
+                (msg->data.result);
+        }
+        if (curl_multi_remove_handle(requestContext->curlm,
+                                     msg->easy_handle) != CURLM_OK) {
+            return S3StatusInternalError;
+        }
+        // Finish the request, ensuring that all callbacks have been made,
+        // and also releases the request
+        request_finish(request);
+        // Now, since a callback was made, there may be new requests
+        // queued up to be performed immediately, so do so
+    }
 
     return S3StatusOK;
+}
+
+void* S3_get_curl_request_context(S3RequestContext *requestContext)
+{
+    return requestContext->curlm;
 }
 
 S3Status S3_get_request_context_fdsets(S3RequestContext *requestContext,

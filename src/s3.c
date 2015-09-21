@@ -29,7 +29,10 @@
  * calls to libs3 functions, and prints the results.
  **/
 
-#define _XOPEN_SOURCE 500
+#ifndef DARWIN
+#   define _XOPEN_SOURCE 500
+#endif
+
 #include <ctype.h>
 #include <getopt.h>
 #include <stdio.h>
@@ -1610,9 +1613,9 @@ static S3Status listPartsCallback(int isTruncated,
             strftime(timebuf, sizeof(timebuf), "%Y-%m-%dT%H:%M:%SZ",
                      gmtime(&t));
             printf("%-30s", timebuf);
-            printf("%-15lu", part->partNumber);            
+            printf("%-15llu", (unsigned long long)part->partNumber);
             printf("%-45s", part->eTag);            
-            printf("%-15lu\n", part->size);
+            printf("%-15llu\n", (unsigned long long)part->size);
 
         }
     }

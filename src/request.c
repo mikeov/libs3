@@ -46,6 +46,8 @@ static Request *requestStackG[REQUEST_STACK_SIZE];
 
 static int requestStackCountG;
 
+static S3CurlRequestContextCallback* curlRequestContextCallbackG;
+
 char defaultHostNameG[S3_MAX_HOSTNAME_SIZE];
 
 
@@ -1084,7 +1086,9 @@ static void request_release(Request *request)
 
 
 S3Status request_api_initialize(const char *userAgentInfo, int flags,
-                                const char *defaultHostName)
+                                const char *defaultHostName,
+                                S3CurlRequestContextCallback
+                                    *curlRequestContextCallback)
 {
     if (curl_global_init(CURL_GLOBAL_ALL & 
                          ~((flags & S3_INIT_WINSOCK) ? 0 : CURL_GLOBAL_WIN32))
@@ -1124,7 +1128,7 @@ S3Status request_api_initialize(const char *userAgentInfo, int flags,
     snprintf(userAgentG, sizeof(userAgentG), 
              "Mozilla/4.0 (Compatible; %s; libs3 %s.%s; %s)",
              userAgentInfo, LIBS3_VER_MAJOR, LIBS3_VER_MINOR, platform);
-    
+    curlRequestContextCallbackG = curlRequestContextCallback;
     return S3StatusOK;
 }
 
@@ -1190,6 +1194,13 @@ void request_perform(const RequestParams *params, S3RequestContext *context)
     
     // Get an initialized Request structure now
     if ((status = request_get(params, &computed, &request)) != S3StatusOK) {
+        return_status(status);
+    }
+
+    // Application's curl setup, if any.
+    if (curlRequestContextCallbackG &&
+            (status = (*curlRequestContextCallbackG)(request->curl,
+                                                     params->callbackData))) {
         return_status(status);
     }
 

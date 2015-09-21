@@ -42,6 +42,19 @@ LIBS3_VER_MAJOR ?= 2
 LIBS3_VER_MINOR ?= 0
 LIBS3_VER := $(LIBS3_VER_MAJOR).$(LIBS3_VER_MINOR)
 
+LIBS3_PREFIX = libs3
+ifeq ($(shell uname), Darwin)
+        OS_DARWIN=YES
+        LIBS3_SHARED_NAME    = $(LIBS3_PREFIX).dylib
+        LIBS3_VERS_NAME      = $(LIBS3_PREFIX).$(LIBS3_VER_MAJOR).dylib
+        LIBS3_VERS_FULL_NAME = $(LIBS3_PREFIX).$(LIBS3_VER).dylib
+        S3_LIBS3             = $(LIBS3_STATIC)
+else
+        LIBS3_SHARED_NAME    = $(LIBS3_PREFIX).so
+        LIBS3_VERS_NAME      = $(LIBS3_SHARED_NAME).$(LIBS3_VER_MAJOR)
+        LIBS3_VERS_FULL_NAME = $(LIBS3_SHARED_NAME).$(LIBS3_VER)
+        S3_LIBS3             = $(LIBS3_SHARED)
+endif
 
 # -----------------------------------------------------------------------------
 # Determine verbosity.  VERBOSE_SHOW should be prepended to every command which
@@ -165,26 +178,28 @@ exported: libs3 s3 headers
 .PHONY: install
 install: exported
 	$(QUIET_ECHO) $(DESTDIR)/bin/s3: Installing executable
-	$(VERBOSE_SHOW) install -Dps -m u+rwx,go+rx $(BUILD)/bin/s3 \
+	$(VERBOSE_SHOW) install $(INSTALL_OPTS) -d $(DESTDIR)/bin
+	$(VERBOSE_SHOW) install $(INSTALL_OPTS) -d $(DESTDIR)/lib
+	$(VERBOSE_SHOW) install $(INSTALL_OPTS) -d $(DESTDIR)/include
+	$(VERBOSE_SHOW) install $(INSTALL_OPTS) -ps -m u+rwx,go+rx $(BUILD)/bin/s3 \
                     $(DESTDIR)/bin/s3
 	$(QUIET_ECHO) \
-        $(LIBDIR)/libs3.so.$(LIBS3_VER): Installing shared library
-	$(VERBOSE_SHOW) install -Dps -m u+rw,go+r \
-               $(BUILD)/lib/libs3.so.$(LIBS3_VER_MAJOR) \
-               $(LIBDIR)/libs3.so.$(LIBS3_VER)
+        $(LIBDIR)/$(LIBS3_VERS_NAME): Installing shared library
+	$(VERBOSE_SHOW) install $(INSTALL_OPTS) -p -m u+rw,go+r \
+               $(BUILD)/lib/$(LIBS3_VERS_NAME) \
+               $(LIBDIR)/$(LIBS3_VERS_FULL_NAME)
 	$(QUIET_ECHO) \
-        $(LIBDIR)/libs3.so.$(LIBS3_VER_MAJOR): Linking shared library
-	$(VERBOSE_SHOW) ln -sf libs3.so.$(LIBS3_VER) \
-               $(LIBDIR)/libs3.so.$(LIBS3_VER_MAJOR)
-	$(QUIET_ECHO) $(LIBDIR)/libs3.so: Linking shared library
-	$(VERBOSE_SHOW) ln -sf libs3.so.$(LIBS3_VER_MAJOR) $(LIBDIR)/libs3.so
+        $(LIBDIR)/$(LIBS3_VERS_NAME): Linking shared library
+	$(VERBOSE_SHOW) ln -sf $(LIBS3_VERS_FULL_NAME) \
+               $(LIBDIR)/$(LIBS3_VERS_NAME)
+	$(QUIET_ECHO) $(LIBDIR)/$(LIBS3_SHARED_NAME): Linking shared library
+	$(VERBOSE_SHOW) ln -sf $(LIBS3_VERS_NAME) $(LIBDIR)/$(LIBS3_SHARED_NAME)
 	$(QUIET_ECHO) $(LIBDIR)/libs3.a: Installing static library
-	$(VERBOSE_SHOW) install -Dp -m u+rw,go+r $(BUILD)/lib/libs3.a \
+	$(VERBOSE_SHOW) install $(INSTALL_OPTS) -p -m u+rw,go+r $(BUILD)/lib/libs3.a \
                     $(LIBDIR)/libs3.a
 	$(QUIET_ECHO) $(DESTDIR)/include/libs3.h: Installing header
-	$(VERBOSE_SHOW) install -Dp -m u+rw,go+r $(BUILD)/include/libs3.h \
+	$(VERBOSE_SHOW) install $(INSTALL_OPTS) -p -m u+rw,go+r $(BUILD)/include/libs3.h \
                     $(DESTDIR)/include/libs3.h
-
 
 # --------------------------------------------------------------------------
 # Uninstall target
@@ -196,9 +211,9 @@ uninstall:
 	    rm -f $(DESTDIR)/bin/s3 \
               $(DESTDIR)/include/libs3.h \
               $(DESTDIR)/lib/libs3.a \
-              $(DESTDIR)/lib/libs3.so \
-              $(DESTDIR)/lib/libs3.so.$(LIBS3_VER_MAJOR) \
-              $(DESTDIR)/lib/libs3.so.$(LIBS3_VER)
+              $(DESTDIR)/lib/$(LIBS3_SHARED_NAME) \
+              $(DESTDIR)/lib/$(LIBS3_VERS_NAME) \
+              $(DESTDIR)/lib/$(LIBS3_VERS_FULL_NAME)
 
 
 # --------------------------------------------------------------------------
@@ -224,7 +239,7 @@ $(BUILD)/obj/%.do: src/%.c
 # --------------------------------------------------------------------------
 # libs3 library targets
 
-LIBS3_SHARED = $(BUILD)/lib/libs3.so.$(LIBS3_VER_MAJOR)
+LIBS3_SHARED = $(BUILD)/lib/$(LIBS3_VERS_NAME)
 LIBS3_STATIC = $(BUILD)/lib/libs3.a
 
 .PHONY: libs3
@@ -235,11 +250,21 @@ LIBS3_SOURCES := acl.c bucket.c error_parser.c general.c \
                  response_headers_handler.c service_access_logging.c \
                  service.c simplexml.c util.c multipart.c
 
+ifdef OS_DARWIN
 $(LIBS3_SHARED): $(LIBS3_SOURCES:%.c=$(BUILD)/obj/%.do)
 	$(QUIET_ECHO) $@: Building shared library
 	@ mkdir -p $(dir $@)
-	$(VERBOSE_SHOW) $(CC) -shared -Wl,-soname,libs3.so.$(LIBS3_VER_MAJOR) \
+	$(VERBOSE_SHOW) $(CC) -dynamiclib -install_name \
+        $(LIBS3_VERS_NAME) \
+        -compatibility_version $(LIBS3_VER_MAJOR) \
+        -current_version $(LIBS3_VER) -o $@ $^ $(LDFLAGS)
+else
+$(LIBS3_SHARED): $(LIBS3_SOURCES:%.c=$(BUILD)/obj/%.do)
+	$(QUIET_ECHO) $@: Building shared library
+	@ mkdir -p $(dir $@)
+	$(VERBOSE_SHOW) $(CC) -shared -Wl,-soname,$(LIBS3_VERS_NAME) \
         -o $@ $^ $(LDFLAGS)
+endif
 
 $(LIBS3_STATIC): $(LIBS3_SOURCES:%.c=$(BUILD)/obj/%.o)
 	$(QUIET_ECHO) $@: Building static library
@@ -253,7 +278,7 @@ $(LIBS3_STATIC): $(LIBS3_SOURCES:%.c=$(BUILD)/obj/%.o)
 .PHONY: s3
 s3: $(BUILD)/bin/s3
 
-$(BUILD)/bin/s3: $(BUILD)/obj/s3.o $(LIBS3_SHARED)
+$(BUILD)/bin/s3: $(BUILD)/obj/s3.o $(S3_LIBS3)
 	$(QUIET_ECHO) $@: Building executable
 	@ mkdir -p $(dir $@)
 	$(VERBOSE_SHOW) $(CC) -o $@ $^ $(LDFLAGS)
@@ -346,7 +371,7 @@ $(DEBDEVPKG): exported $(BUILD)/deb-dev/DEBIAN/control \
            $(BUILD)/deb-dev/usr/share/doc/libs3-dev/copyright
 	DESTDIR=$(BUILD)/deb-dev/usr $(MAKE) install
 	rm -rf $(BUILD)/deb-dev/usr/bin
-	rm -f $(BUILD)/deb-dev/usr/lib/libs3.so*
+	rm -f $(BUILD)/deb-dev/usr/lib/$(LIBS3_SHARED_NAME)*
 	@mkdir -p $(dir $@)
 	fakeroot dpkg-deb -b $(BUILD)/deb-dev $@
 	mv $@ $(BUILD)/pkg/libs3-dev_$(LIBS3_VER)_$(DEBARCH).deb
@@ -354,7 +379,7 @@ $(DEBDEVPKG): exported $(BUILD)/deb-dev/DEBIAN/control \
 $(BUILD)/deb/DEBIAN/control: debian/control
 	@mkdir -p $(dir $@)
 	echo -n "Depends: " > $@
-	dpkg-shlibdeps -Sbuild -O $(BUILD)/lib/libs3.so.$(LIBS3_VER_MAJOR) | \
+	dpkg-shlibdeps -Sbuild -O $(BUILD)/lib/$(LIBS3_VERS_NAME) | \
             cut -d '=' -f 2- >> $@
 	sed -e 's/LIBS3_VERSION/$(LIBS3_VER)/' \
             < $< | sed -e 's/DEBIAN_ARCHITECTURE/$(DEBARCH)/' | \

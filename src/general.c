@@ -32,16 +32,23 @@
 
 static int initializeCountG = 0;
 
-S3Status S3_initialize(const char *userAgentInfo, int flags,
-                       const char *defaultS3HostName)
+S3Status S3_initializeEx(const char *userAgentInfo, int flags,
+                       const char *defaultS3HostName,
+                       S3CurlRequestContextCallback *curlRequestContextCallback)
 {
     if (initializeCountG++) {
         return S3StatusOK;
     }
 
-    return request_api_initialize(userAgentInfo, flags, defaultS3HostName);
+    return request_api_initialize(userAgentInfo, flags, defaultS3HostName,
+        curlRequestContextCallback);
 }
 
+S3Status S3_initialize(const char *userAgentInfo, int flags,
+                       const char *defaultS3HostName)
+{
+    return S3_initializeEx(userAgentInfo, flags, defaultS3HostName, NULL);
+}
 
 void S3_deinitialize()
 {

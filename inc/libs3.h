@@ -965,6 +965,25 @@ typedef struct S3ErrorDetails
 /** **************************************************************************
  * Callback Signatures
  ************************************************************************** **/
+/**
+ * cURL context setup callback is invoked after cURL request initialization
+ * prior to curl_multi_add_handle() or curl_multi_add_handle() invocation for
+ * every request. The callback is intended to allow to cURL request context
+ * modification, for example configuring https server verification.
+ *
+ *
+ * @param cURL "easy" handle.
+ * @param callbackData is the callback data as specified when the S3 request
+ *        was issued.
+ * @return S3StatusOK to continue processing the request, anything else to
+ *         immediately abort the request with a status which will be
+ *         passed to the S3ResponseCompleteCallback for this request.
+ *         Typically, this will return either S3StatusOK or
+ *         S3StatusAbortedByCallback.
+ **/
+typedef S3Status (S3CurlRequestContextCallback)
+    (void *curlEasyHandle, void *requestCallbackData);
+
 
 /**
  * This callback is made whenever the response properties become available for
@@ -1326,7 +1345,7 @@ typedef struct S3AbortMultipartUploadHandler
  *        caller until S3_deinitialize() is called.
  * @param flags is a bitmask of some combination of S3_INIT_XXX flag, or
  *        S3_INIT_ALL, indicating which of the libraries that libs3 depends
- *        upon should be initialized by S3_initialize().  Only if your program
+ *        upon should be initialized by S3_initializeEx().  Only if your program
  *        initializes one of these dependency libraries itself should anything
  *        other than S3_INIT_ALL be passed in for this bitmask.
  *
@@ -1342,6 +1361,11 @@ typedef struct S3AbortMultipartUploadHandler
  *        hostname to use when making S3 requests; this value is used
  *        whenever the hostName of an S3BucketContext is NULL.  If NULL is
  *        passed here then the default of S3_DEFAULT_HOSTNAME will be used.
+ * @param cURL library context setup callback is invoked after curl request
+ *        initialization prior to curl_multi_add_handle() or
+ *        curl_multi_add_handle() invocation for every request. The callback is
+ *        intended to allow to curl request context modification, for example
+ *        configuring https server verification.
  * @return One of:
  *         S3StatusOK on success
  *         S3StatusUriTooLong if the defaultS3HostName is longer than
@@ -1349,6 +1373,15 @@ typedef struct S3AbortMultipartUploadHandler
  *         S3StatusInternalError if dependent libraries could not be
  *             initialized
  *         S3StatusOutOfMemory on failure due to out of memory
+ **/
+S3Status S3_initializeEx(const char *userAgentInfo, int flags,
+                         const char *defaultS3HostName,
+                         S3CurlRequestContextCallback
+                            *curlRequestContextCallback);
+
+/**
+ * S3_initialize invokes S3_initializeEx with cURL setup callback set to NULL.
+ *
  **/
 S3Status S3_initialize(const char *userAgentInfo, int flags,
                        const char *defaultS3HostName);
@@ -1529,6 +1562,27 @@ S3Status S3_runall_request_context(S3RequestContext *requestContext);
 S3Status S3_runonce_request_context(S3RequestContext *requestContext, 
                                     int *requestsRemainingReturn);
 
+/**
+ * Finishes completed requests, if any. This function block waiting for I/O on
+ * any request.  This function would normally be used with custom cURL library
+ * event loop.
+ *
+ * @param requestContext is the S3RequestContext to process
+ * @return One of:
+ *         S3StatusOK if request processing proceeded without error
+ *         S3StatusInternalError if an internal error prevented the
+ *             S3RequestContext from running one or more requests
+ **/
+S3Status S3_finish_request_context(S3RequestContext *requestContext);
+
+/**
+ * Retrieves cURL "multi" handle used by this context.
+ * This function would normally be used with custom cURL library event loop.
+ *
+ * @param requestContext is the S3RequestContext to process
+ * @return cURL "multi" handle.
+ **/
+void* S3_get_curl_request_context(S3RequestContext *requestContext);
 
 /**
  * This function, in conjunction allows callers to manually manage a set of
