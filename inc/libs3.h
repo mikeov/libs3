@@ -927,6 +927,8 @@ typedef struct S3GetConditions
  * S3ErrorDetails provides detailed information describing an S3 error.  This
  * is only presented when the error is an S3-generated error (i.e. one of the
  * S3StatusErrorXXX values).
+ * With error less S3StatusErrorAccessDenied message field used to convey lib
+ * cURL error message.
  **/
 typedef struct S3ErrorDetails
 {

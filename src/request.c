@@ -1228,6 +1228,10 @@ void request_perform(const RequestParams *params, S3RequestContext *context)
             if (request->status == S3StatusOK) {
                 request->status = (code == CURLM_OUT_OF_MEMORY) ?
                     S3StatusOutOfMemory : S3StatusInternalError;
+                if (! request->errorParser.s3ErrorDetails.message) {
+                    request->errorParser.s3ErrorDetails.message =
+                        curl_easy_strerror(code);
+                }
             }
             request_finish(request);
         }
@@ -1237,6 +1241,10 @@ void request_perform(const RequestParams *params, S3RequestContext *context)
         CURLcode code = curl_easy_perform(request->curl);
         if ((code != CURLE_OK) && (request->status == S3StatusOK)) {
             request->status = request_curl_code_to_status(code);
+            if (! request->errorParser.s3ErrorDetails.message) {
+                request->errorParser.s3ErrorDetails.message =
+                    curl_easy_strerror(code);
+            }
         }
         // Finish the request, ensuring that all callbacks have been made, and
         // also releases the request

@@ -159,6 +159,10 @@ S3Status S3_finish_request_context(S3RequestContext *requestContext)
             (request->status == S3StatusOK)) {
             request->status = request_curl_code_to_status
                 (msg->data.result);
+            if (! request->errorParser.s3ErrorDetails.message) {
+                request->errorParser.s3ErrorDetails.message =
+                    curl_easy_strerror(msg->data.result);
+            }
         }
         if (curl_multi_remove_handle(requestContext->curlm,
                                      msg->easy_handle) != CURLM_OK) {
